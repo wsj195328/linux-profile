@@ -1,0 +1,11 @@
+[groups]
+manager1 = Onejun
+manager2 = wsj195328
+manager3 = Xiaohui
+manager4 = wsj1
+
+[svn/SVN:/]
+@manager1 = rw
+@manager2 = rw
+@manager3 = rw
+@manager4 = rw
