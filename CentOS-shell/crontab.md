@@ -6,10 +6,10 @@
            crontab -e
 
 # 每隔三天的6点30分重启服务器(wget)
-           30 6 */3 * * /root/reboot.sh
+           30 6 */3 * * sh /root/reboot.sh
 
 # 每隔8个小时清理内存(wget)
-           0 */8 * * * /root/free.sh
+           0 */8 * * * sh /root/free.sh
 
 
 
