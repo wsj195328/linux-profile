@@ -4,7 +4,6 @@
 
 # 使用说明
          wget --no-check-certificate -O **.sh 地址 && chmod -x **.sh && bash **.sh install
-         
          eg: 
          安装
          wget --no-check-certificate -O lotserver.sh https://raw.githubusercontent.com/wsj195328/linux-profile/master/CentOS-shell/lotserver.sh && chmod -x lotserver.sh && bash lotserver.sh 'install'
