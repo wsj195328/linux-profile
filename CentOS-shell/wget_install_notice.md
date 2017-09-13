@@ -3,12 +3,14 @@
          wget --no-check-certificate -O appex.sh https://raw.githubusercontent.com/0oVicero0/serverSpeeder_Install/master/appex.sh && chmod +x appex.sh && bash appex.sh install
 
 # 使用说明
+```
          wget --no-check-certificate -O **.sh 地址 && chmod -x **.sh && bash **.sh install
          eg: 
          安装
          wget --no-check-certificate -O lotserver.sh https://raw.githubusercontent.com/wsj195328/linux-profile/master/CentOS-shell/lotserver.sh && chmod -x lotserver.sh && bash lotserver.sh 'install'
          卸载
          wget --no-check-certificate -O lotserver.sh https://raw.githubusercontent.com/wsj195328/linux-profile/master/CentOS-shell/lotserver.sh && chmod -x lotserver.sh && bash lotserver.sh 'uninstall'
+```
 
 # 其他功能
 
