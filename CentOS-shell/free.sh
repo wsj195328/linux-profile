@@ -1,2 +1,2 @@
-# when memory less 350, free memory
+# when memory less 400, free memory
 free -m |grep -i mem |awk '{if($4 < 400){ printf("3") > "/proc/sys/vm/drop_caches"}}';
