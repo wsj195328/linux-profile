@@ -13,7 +13,8 @@
 anonymous_enable=YES
 anon_root=/ftp/FTP/File
 anon_other_write_enable=YES
-anon_world_readable_only=no
+anon_world_readable_only=NO
+local_root=/ftp/FTP/File
 #
 # Uncomment this to allow local users to log in.
 local_enable=YES
