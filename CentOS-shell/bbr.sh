@@ -1,235 +1,244 @@
 #!/usr/bin/env bash
-PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
-export PATH
+#
+# Auto install latest kernel for TCP BBR
+#
+# System Required:  CentOS 6+, Debian7+, Ubuntu12+
+#
+# Copyright (C) 2016-2017 Teddysun <i@teddysun.com>
+#
+# URL: https://teddysun.com/489.html
+#
 
-#=================================================
-#	System Required: Debian/Ubuntu
-#	Description: TCP-BBR
-#	Version: 1.0.17
-#	Author: Toyo
-#	Blog: https://doub.io/wlzy-16/
-#=================================================
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+plain='\033[0m'
 
-Green_font_prefix="\033[32m" && Red_font_prefix="\033[31m" && Green_background_prefix="\033[42;37m" && Red_background_prefix="\033[41;37m" && Font_color_suffix="\033[0m"
-Info="${Green_font_prefix}[信息]${Font_color_suffix}"
-Error="${Red_font_prefix}[错误]${Font_color_suffix}"
-Tip="${Green_font_prefix}[注意]${Font_color_suffix}"
-filepath=$(cd "$(dirname "$0")"; pwd)
-file=$(echo -e "${filepath}"|awk -F "$0" '{print $1}')
+cur_dir=$(pwd)
 
-check_root(){
-	[[ $EUID != 0 ]] && echo -e "${Error} 当前账号非ROOT(或没有ROOT权限)，无法继续操作，请使用${Green_background_prefix} sudo su ${Font_color_suffix}来获取临时ROOT权限（执行后会提示输入当前账号的密码）。" && exit 1
+[[ $EUID -ne 0 ]] && echo -e "${red}Error:${plain} This script must be run as root!" && exit 1
+
+[[ -d "/proc/vz" ]] && echo -e "${red}Error:${plain} Your VPS is based on OpenVZ, not be supported." && exit 1
+
+if [ -f /etc/redhat-release ]; then
+    release="centos"
+elif cat /etc/issue | grep -Eqi "debian"; then
+    release="debian"
+elif cat /etc/issue | grep -Eqi "ubuntu"; then
+    release="ubuntu"
+elif cat /etc/issue | grep -Eqi "centos|red hat|redhat"; then
+    release="centos"
+elif cat /proc/version | grep -Eqi "debian"; then
+    release="debian"
+elif cat /proc/version | grep -Eqi "ubuntu"; then
+    release="ubuntu"
+elif cat /proc/version | grep -Eqi "centos|red hat|redhat"; then
+    release="centos"
+fi
+
+get_latest_version() {
+
+    latest_version=$(wget -qO- http://kernel.ubuntu.com/~kernel-ppa/mainline/ | awk -F'\"v' '/v[4-9]./{print $2}' | cut -d/ -f1 | grep -v -  | sort -V | tail -1)
+
+    [ -z ${latest_version} ] && return 1
+
+    if [[ `getconf WORD_BIT` == "32" && `getconf LONG_BIT` == "64" ]]; then
+        deb_name=$(wget -qO- http://kernel.ubuntu.com/~kernel-ppa/mainline/v${latest_version}/ | grep "linux-image" | grep "generic" | awk -F'\">' '/amd64.deb/{print $2}' | cut -d'<' -f1 | head -1)
+        deb_kernel_url="http://kernel.ubuntu.com/~kernel-ppa/mainline/v${latest_version}/${deb_name}"
+        deb_kernel_name="linux-image-${latest_version}-amd64.deb"
+    else
+        deb_name=$(wget -qO- http://kernel.ubuntu.com/~kernel-ppa/mainline/v${latest_version}/ | grep "linux-image" | grep "generic" | awk -F'\">' '/i386.deb/{print $2}' | cut -d'<' -f1 | head -1)
+        deb_kernel_url="http://kernel.ubuntu.com/~kernel-ppa/mainline/v${latest_version}/${deb_name}"
+        deb_kernel_name="linux-image-${latest_version}-i386.deb"
+    fi
+
+    [ ! -z ${deb_name} ] && return 0 || return 1
 }
-#检查系统
-check_sys(){
-	if [[ -f /etc/redhat-release ]]; then
-		release="centos"
-	elif cat /etc/issue | grep -q -E -i "debian"; then
-		release="debian"
-	elif cat /etc/issue | grep -q -E -i "ubuntu"; then
-		release="ubuntu"
-	elif cat /etc/issue | grep -q -E -i "centos|red hat|redhat"; then
-		release="centos"
-	elif cat /proc/version | grep -q -E -i "debian"; then
-		release="debian"
-	elif cat /proc/version | grep -q -E -i "ubuntu"; then
-		release="ubuntu"
-	elif cat /proc/version | grep -q -E -i "centos|red hat|redhat"; then
-		release="centos"
+
+get_opsy() {
+    [ -f /etc/redhat-release ] && awk '{print ($1,$3~/^[0-9]/?$3:$4)}' /etc/redhat-release && return
+    [ -f /etc/os-release ] && awk -F'[= "]' '/PRETTY_NAME/{print $3,$4,$5}' /etc/os-release && return
+    [ -f /etc/lsb-release ] && awk -F'[="]+' '/DESCRIPTION/{print $2}' /etc/lsb-release && return
+}
+
+opsy=$( get_opsy )
+arch=$( uname -m )
+lbit=$( getconf LONG_BIT )
+kern=$( uname -r )
+
+get_char() {
+    SAVEDSTTY=`stty -g`
+    stty -echo
+    stty cbreak
+    dd if=/dev/tty bs=1 count=1 2> /dev/null
+    stty -raw
+    stty echo
+    stty $SAVEDSTTY
+}
+
+getversion() {
+    if [[ -s /etc/redhat-release ]]; then
+        grep -oE  "[0-9.]+" /etc/redhat-release
+    else
+        grep -oE  "[0-9.]+" /etc/issue
     fi
 }
-# 本段获取最新版本的代码来源自: https://teddysun.com/489.html
-Set_latest_new_version(){
-	echo -e "请输入 要下载安装的Linux内核版本(BBR) [ 格式: x.xx.xx ，例如: 4.10.12 ]
-${Tip} 内核版本列表请去这里获取：[ http://kernel.ubuntu.com/~kernel-ppa/mainline/ ]"
-	stty erase '^H' && read -p "(默认回车，自动获取最新版本):" latest_version
-	[[ -z "${latest_version}" ]] && get_latest_new_version
-	echo
+
+centosversion() {
+    if [ "${release}" == "centos" ]; then
+        local code=$1
+        local version="$(getversion)"
+        local main_ver=${version%%.*}
+        if [ "$main_ver" == "$code" ]; then
+            return 0
+        else
+            return 1
+        fi
+    else
+        return 1
+    fi
 }
-get_latest_new_version(){
-	echo -e "${Info} 检测内核最新版本中..."
-	latest_version=$(wget -qO- "http://kernel.ubuntu.com/~kernel-ppa/mainline/" | awk -F'\"v' '/v[4-9].[0-9]*.[0-9]/{print $2}' |grep -v '\-rc'| cut -d/ -f1 | sort -V | tail -1)
-	[[ -z ${latest_version} ]] && echo -e "\033[41;37m [错误] \033[0m 检测内核最新版本失败 !" && exit 1
-	echo -e "${Info} 当前内核最新版本为 : ${latest_version}"
+
+check_bbr_status() {
+    local param=$(sysctl net.ipv4.tcp_available_congestion_control | awk '{print $3}')
+    if [[ "${param}" == "bbr" ]]; then
+        return 0
+    else
+        return 1
+    fi
 }
-get_latest_version(){
-	Set_latest_new_version
-	bit=`uname -m`
-	if [[ ${bit} == "x86_64" ]]; then
-		deb_name=$(wget -qO- http://kernel.ubuntu.com/~kernel-ppa/mainline/v${latest_version}/ | grep "linux-image" | grep "generic" | awk -F'\">' '/amd64.deb/{print $2}' | cut -d'<' -f1 | head -1)
-		deb_kernel_url="http://kernel.ubuntu.com/~kernel-ppa/mainline/v${latest_version}/${deb_name}"
-		deb_kernel_name="linux-image-${latest_version}-amd64.deb"
-	else
-		deb_name=$(wget -qO- http://kernel.ubuntu.com/~kernel-ppa/mainline/v${latest_version}/ | grep "linux-image" | grep "generic" | awk -F'\">' '/i386.deb/{print $2}' | cut -d'<' -f1 | head -1)
-		deb_kernel_url="http://kernel.ubuntu.com/~kernel-ppa/mainline/v${latest_version}/${deb_name}"
-		deb_kernel_name="linux-image-${latest_version}-i386.deb"
-	fi
+
+version_ge(){
+    test "$(echo "$@" | tr " " "\n" | sort -rV | head -n 1)" == "$1"
 }
-#检查内核是否满足
-check_deb_off(){
-	get_latest_new_version
-	deb_ver=`dpkg -l|grep linux-image | awk '{print $2}' | awk -F '-' '{print $3}' | grep '[4-9].[0-9]*.'`
-	deb_ver_2=$(echo "${deb_ver: -2}")
-	if [[ "${deb_ver_2}" == ".0" ]]; then
-		deb_ver=$(echo "${deb_ver}" |awk -F '.0' '{print $1}')
-	fi
-	if [[ "${deb_ver}" != "" ]]; then
-		if [[ "${deb_ver}" == "${latest_version}" ]]; then
-			echo -e "${Info} 检测到 当前内核版本[${deb_ver}] 已满足要求，继续..."
-		else
-			echo -e "\033[42;37m[错误]\033[0m 检测到 当前内核版本[${deb_ver}] 不是最新版本，建议使用${Green_font_prefix} bash ${file}/bbr.sh ${Font_color_suffix}来升级内核 !"
-		fi
-	else
-		echo -e "${Error} 检测到 当前内核版本[${deb_ver}] 不支持开启BBR，请使用${Green_font_prefix} bash ${file}/bbr.sh ${Font_color_suffix}来更换最新内核 !" && exit 1
-	fi
+
+check_kernel_version() {
+    local kernel_version=$(uname -r | cut -d- -f1)
+    if version_ge ${kernel_version} 4.9; then
+        return 0
+    else
+        return 1
+    fi
 }
-# 删除其余内核
-del_deb(){
-	deb_total=`dpkg -l | grep linux-image | awk '{print $2}' | grep -v "${latest_version}" | wc -l`
-	if [ "${deb_total}" > "1" ]; then
-		echo -e "${Info} 检测到 ${deb_total} 个其余内核，开始卸载..."
-		for((integer = 1; integer <= ${deb_total}; integer++))
-		do
-			deb_del=`dpkg -l|grep linux-image | awk '{print $2}' | grep -v "${latest_version}" | head -${integer}`
-			echo -e "${Info} 开始卸载 ${deb_del} 内核..."
-			apt-get purge -y ${deb_del}
-			echo -e "${Info} 卸载 ${deb_del} 内核卸载完成，继续..."
-		done
-		deb_total=`dpkg -l|grep linux-image | awk '{print $2}' | grep -v "${latest_version}" | wc -l`
-		if [ "${deb_total}" = "0" ]; then
-			echo -e "${Info} 内核卸载完毕，继续..."
-		else
-			echo -e "${Error} 内核卸载异常，请检查 !" && exit 1
-		fi
-	else
-		echo -e "${Error} 检测到 内核 数量不正确，请检查 !" && exit 1
-	fi
+
+install_elrepo() {
+
+    if centosversion 5; then
+        echo -e "${red}Error:${plain} not supported CentOS 5."
+        exit 1
+    fi
+
+    rpm --import https://www.elrepo.org/RPM-GPG-KEY-elrepo.org
+
+    if centosversion 6; then
+        rpm -Uvh http://www.elrepo.org/elrepo-release-6-8.el6.elrepo.noarch.rpm
+    elif centosversion 7; then
+        rpm -Uvh http://www.elrepo.org/elrepo-release-7.0-3.el7.elrepo.noarch.rpm
+    fi
+
+    if [ ! -f /etc/yum.repos.d/elrepo.repo ]; then
+        echo -e "${red}Error:${plain} Install elrepo failed, please check it."
+        exit 1
+    fi
 }
-del_deb_over(){
-	del_deb
-	update-grub
-	addsysctl
-	echo -e "\033[42;37m[注意]\033[0m 重启VPS后，请重新运行脚本查看BBR是否加载成功 \033[42;37m bash ${file}/bbr.sh status \033[0m"
-	stty erase '^H' && read -p "需要重启VPS后，才能开启BBR，是否现在重启 ? [Y/n] :" yn
-	[ -z "${yn}" ] && yn="y"
-	if [[ $yn == [Yy] ]]; then
-		echo -e "\033[41;37m[信息]\033[0m VPS 重启中..."
-		reboot
-	fi
+
+sysctl_config() {
+    sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf
+    sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf
+    echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
+    echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+    sysctl -p >/dev/null 2>&1
 }
-# 安装BBR
-installbbr(){
-	check_root
-	get_latest_version
-	deb_ver=`dpkg -l|grep linux-image | awk '{print $2}' | awk -F '-' '{print $3}' | grep '[4-9].[0-9]*.'`
-	deb_ver_2=$(echo "${deb_ver: -2}")
-	if [[ "${deb_ver_2}" == ".0" ]]; then
-		deb_ver=$(echo "${deb_ver}" |awk -F '.0' '{print $1}')
-	fi
-	if [ "${deb_ver}" != "" ]; then	
-		if [ "${deb_ver}" == "${latest_version}" ]; then
-			echo -e "${Info} 检测到 当前内核版本 已是最新版本，无需继续安装 !"
-			deb_total=`dpkg -l|grep linux-image | awk '{print $2}' | grep -v "${latest_version}" | wc -l`
-			if [ "${deb_total}" != "0" ]; then
-				echo -e "${Red_background_prefix}[信息]${Font_color_suffix} 检测到内核数量异常，存在多余内核，开始删除..."
-				del_deb_over
-			else
-				exit 1
-			fi
-		else
-			echo -e "${Info} 检测到 当前内核版本 不是最新版本，升级(或降级)内核..."
-		fi
-	else
-		echo -e "${Info} 检测到 当前内核版本 不支持开启BBR，开始安装..."
-		virt=`virt-what`
-		if [[ -z ${virt} ]]; then
-			apt-get update && apt-get install virt-what -y
-			virt=`virt-what`
-		fi
-		if [[ ${virt} == "openvz" ]]; then
-			echo -e "${Error} BBR 不支持 OpenVZ 虚拟化 !" && exit 1
-		fi
-	fi
-	echo "nameserver 8.8.8.8" > /etc/resolv.conf
-	echo "nameserver 8.8.4.4" >> /etc/resolv.conf
-	
-	wget -O ${deb_kernel_name} "${deb_kernel_url}"
-	if [ -s ${deb_kernel_name} ]; then
-		echo -e "${Info} 内核文件下载成功，开始安装内核..."
-		dpkg -i ${deb_kernel_name}
-		rm -rf ${deb_kernel_name}
-	else
-		echo -e "${Error} 内核文件下载失败，请检查 !" && exit 1
-	fi
-	#判断内核是否安装成功
-	deb_ver=`dpkg -l | grep linux-image | awk '{print $2}' | awk -F '-' '{print $3}' | grep "${latest_version}"`
-	if [ "${deb_ver}" != "" ]; then
-		echo -e "${Info} 检测到 内核 已安装成功，开始卸载其余内核..."
-		del_deb_over
-	else
-		echo -e "${Error} 检测到 内核版本 安装失败，请检查 !" && exit 1
-	fi
+
+install_config() {
+    if [[ "${release}" == "centos" ]]; then
+        if centosversion 6; then
+            if [ ! -f "/boot/grub/grub.conf" ]; then
+                echo -e "${red}Error:${plain} /boot/grub/grub.conf not found, please check it."
+                exit 1
+            fi
+            sed -i 's/^default=.*/default=0/g' /boot/grub/grub.conf
+        elif centosversion 7; then
+            if [ ! -f "/boot/grub2/grub.cfg" ]; then
+                echo -e "${red}Error:${plain} /boot/grub2/grub.cfg not found, please check it."
+                exit 1
+            fi
+            grub2-set-default 0
+        fi
+    elif [[ "${release}" == "debian" || "${release}" == "ubuntu" ]]; then
+        /usr/sbin/update-grub
+    fi
 }
-bbrstatus(){
-	check_bbr_status_on=`sysctl net.ipv4.tcp_available_congestion_control | awk '{print $3}'`
-	if [ "${check_bbr_status_on}" = "bbr" ]; then
-		echo -e "${Info} 检测到 BBR 已开启 !"
-		# 检查是否启动BBR
-		check_bbr_status_off=`lsmod | grep bbr`
-		if [ "${check_bbr_status_off}" = "" ]; then
-			echo -e "${Error} 检测到 BBR 已开启但未正常启动，请检查 !"
-		else
-			echo -e "${Info} 检测到 BBR 已开启并已正常启动 !"
-		fi
-		exit 1
-	fi
+
+reboot_os() {
+    echo
+    echo -e "${green}Info:${plain} The system needs to reboot."
+    read -p "Do you want to restart system? [y/n]" is_reboot
+    if [[ ${is_reboot} == "y" || ${is_reboot} == "Y" ]]; then
+        reboot
+    else
+        echo -e "${green}Info:${plain} Reboot has been canceled..."
+        exit 0
+    fi
 }
-addsysctl(){
-	sed -i '/net\.core\.default_qdisc=fq/d' /etc/sysctl.conf
-	sed -i '/net\.ipv4\.tcp_congestion_control=bbr/d' /etc/sysctl.conf
-	
-	echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
-	echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
-	sysctl -p
+
+install_bbr() {
+    check_bbr_status
+    if [ $? -eq 0 ]; then
+        echo
+        echo -e "${green}Info:${plain} TCP BBR has been installed. nothing to do..."
+        exit 0
+    fi
+    check_kernel_version
+    if [ $? -eq 0 ]; then
+        echo
+        echo -e "${green}Info:${plain} Your kernel version is greater than 4.9, directly setting TCP BBR..."
+        sysctl_config
+        echo -e "${green}Info:${plain} Setting TCP BBR completed..."
+        exit 0
+    fi
+
+    if [[ "${release}" == "centos" ]]; then
+        install_elrepo
+        yum --enablerepo=elrepo-kernel -y install kernel-ml kernel-ml-devel
+        if [ $? -ne 0 ]; then
+            echo -e "${red}Error:${plain} Install latest kernel failed, please check it."
+            exit 1
+        fi
+    elif [[ "${release}" == "debian" || "${release}" == "ubuntu" ]]; then
+        [[ ! -e "/usr/bin/wget" ]] && apt-get -y update && apt-get -y install wget
+        get_latest_version
+        [ $? -ne 0 ] && echo -e "${red}Error:${plain} Get latest kernel version failed." && exit 1
+        wget -c -t3 -T60 -O ${deb_kernel_name} ${deb_kernel_url}
+        if [ $? -ne 0 ]; then
+            echo -e "${red}Error:${plain} Download ${deb_kernel_name} failed, please check it."
+            exit 1
+        fi
+        dpkg -i ${deb_kernel_name}
+        rm -fv ${deb_kernel_name}
+    else
+        echo -e "${red}Error:${plain} OS is not be supported, please change to CentOS/Debian/Ubuntu and try again."
+        exit 1
+    fi
+
+    install_config
+    sysctl_config
+    reboot_os
 }
-startbbr(){
-	check_deb_off
-	bbrstatus
-	addsysctl
-	sleep 1s
-	bbrstatus
-}
-# 关闭BBR
-stopbbr(){
-	check_deb_off
-	sed -i '/net\.core\.default_qdisc=fq/d' /etc/sysctl.conf
-	sed -i '/net\.ipv4\.tcp_congestion_control=bbr/d' /etc/sysctl.conf
-	sysctl -p
-	sleep 1s
-	
-	stty erase '^H' && read -p "需要重启VPS后，才能彻底停止BBR，是否现在重启 ? [Y/n] :" yn
-	[ -z "${yn}" ] && yn="y"
-	if [[ $yn == [Yy] ]]; then
-		echo -e "\033[41;37m[信息]\033[0m VPS 重启中..."
-		reboot
-	fi
-}
-# 查看BBR状态
-statusbbr(){
-	check_deb_off
-	bbrstatus
-	echo -e "${Error} BBR 未开启 !"
-}
-check_sys
-[[ ${release} != "debian" ]] && [[ ${release} != "ubuntu" ]] && echo -e "${Error} 本脚本不支持当前系统 ${release} !" && exit 1
-action=$1
-[ -z $1 ] && action=install
-case "$action" in
-	install|start|stop|status)
-	${action}bbr
-	;;
-	*)
-	echo "输入错误 !"
-	echo "用法: { install | start | stop | status }"
-	;;
-esac
+
+
+clear
+echo "---------- System Information ----------"
+echo " OS      : $opsy"
+echo " Arch    : $arch ($lbit Bit)"
+echo " Kernel  : $kern"
+echo "----------------------------------------"
+echo " Auto install latest kernel for TCP BBR"
+echo
+echo " URL: https://teddysun.com/489.html"
+echo "----------------------------------------"
+echo
+echo "Press any key to start...or Press Ctrl+C to cancel"
+char=`get_char`
+
+install_bbr 2>&1 | tee ${cur_dir}/install_bbr.log
