@@ -13,7 +13,7 @@ wget -N --no-check-certificate https://raw.githubusercontent.com/wsj195328/linux
 
 # 3、运行bbr,一次运行，下次开机自启动的
 ```
-bash bbr.sh start
+bash pBBR.sh start
 ```
 
 # 4、查看魔改 BBR 状态
