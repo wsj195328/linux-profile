@@ -3,7 +3,7 @@
 # 1、脚本地址
 
 ```
-wget -N --no-check-certificate https://raw.githubusercontent.com/wsj195328/linux-profile/master/Debian/pBBR.sh
+wget -N --no-check-certificate https://raw.githubusercontent.com/wsj195328/linux-profile/master/Debian/pBBR.sh && chmod 777 pBBR.sh && bash pBBR.sh
 ```
 
 
