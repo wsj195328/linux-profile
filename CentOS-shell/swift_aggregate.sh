@@ -2,6 +2,7 @@
 
 UNIVERSAL_OUTPUTFOLDER=${BUILD_DIR}/${CONFIGURATION}-universal
 INSTALL_DIR=${SRCROOT}/Products
+BINARIES_PATH=${INSTALL_DIR}/${PROJECT_NAME}.framework/${PROJECT_NAME}
 
 # 判断目标文件夹是否存在，存在则删除该文件夹 (delete build)
 if [ -d "${INSTALL_DIR}" ]
@@ -36,8 +37,10 @@ lipo -create -output "${UNIVERSAL_OUTPUTFOLDER}/${PROJECT_NAME}.framework/${PROJ
 # 5、拷贝合并好的文件
 cp -R "${UNIVERSAL_OUTPUTFOLDER}/${PROJECT_NAME}.framework" "${INSTALL_DIR}/"
 
-# 6、移除临时文件，打开目录
+# 6、移除i386 和 x86_64, 此处是打包用，Debug忽略这步
+lipo -remove i386 "${BINARIES_PATH}" -o "${BINARIES_PATH}"
+lipo -remove x86_64 "${BINARIES_PATH}" -o "${BINARIES_PATH}"
+
+# 7、移除临时文件，打开目录
 rm -rf "${UNIVERSAL_OUTPUTFOLDER}"
 open "${INSTALL_DIR}"
-
-
