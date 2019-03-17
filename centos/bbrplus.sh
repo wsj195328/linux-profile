@@ -16,7 +16,7 @@ echo -e "卸载加速..."
 sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf
 sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf
 if [[ -e /appex/bin/serverSpeeder.sh ]]; then
-    wget --no-check-certificate -O appex.sh https://raw.githubusercontent.com/wsj195328/linux-profile/master/speeder/appex.sh && chmod +x appex.sh && bash appex.sh uninstall
+    wget --no-check-certificate -O appex.sh http://yun.oclog.pw/linux/appex.sh && chmod +x appex.sh && bash appex.sh uninstall
     rm -f appex.sh
 fi
 echo -e "下载内核..."
