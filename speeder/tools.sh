@@ -9,9 +9,7 @@ copyright(){
     clear
 echo "\
 ############################################################
-Linux网络优化脚本 (生产环境慎用)
-教程: https://paolu.metaidc.net/blog/21
-Powered by Metaidc
+Linux网络优化脚本
 ############################################################
 "
 }
@@ -154,13 +152,13 @@ if uname -r|grep -q "^5."
 then
     echo "已经是 5.x 内核，不需要更新"
 else
-    wget -N "https://paolu.metaidc.net/sh/bbr.sh" -O bbr.sh && bash bbr.sh
+    wget -N "https://raw.githubusercontent.com/wsj195328/linux-profile/master/speeder/bbr.sh" -O bbr.sh && bash bbr.sh
 fi
   
 }
 
 Update_Shell(){
-  wget -N "https://paolu.metaidc.net/sh/tools.sh" -O tools.sh && chmod +x tools.sh && ./tools.sh
+  wget -N "https://raw.githubusercontent.com/wsj195328/linux-profile/master/speeder/tools.sh" -O tools.sh && chmod +x tools.sh && ./tools.sh
 }
 
 get_opsy() {
@@ -250,7 +248,8 @@ ${Green_font_prefix}1.${Font_color_suffix} 安装BBR原版内核(已经是5.x的
 ${Green_font_prefix}2.${Font_color_suffix} TCP窗口调优
 ${Green_font_prefix}3.${Font_color_suffix} 开启内核转发
 ${Green_font_prefix}4.${Font_color_suffix} 系统资源限制调优
-${Green_font_prefix}5.${Font_color_suffix} 屏蔽ICMP ${Green_font_prefix}6.${Font_color_suffix} 开放ICMP
+${Green_font_prefix}5.${Font_color_suffix} 屏蔽ICMP 
+${Green_font_prefix}6.${Font_color_suffix} 开放ICMP
 "
 get_system_info
 echo -e "当前系统信息: ${Font_color_suffix}$opsy ${Green_font_prefix}$virtual${Font_color_suffix} $arch ${Green_font_prefix}$kern${Font_color_suffix}
